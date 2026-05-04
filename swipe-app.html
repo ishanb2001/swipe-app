@@ -33,14 +33,15 @@
     main {
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
-      padding: 2rem;
+      padding: 2rem 1.25rem 3rem;
     }
 
     .shell {
       text-align: center;
-      max-width: 420px;
+      max-width: 520px;
+      width: 100%;
     }
 
     .shell h1 {
@@ -215,6 +216,97 @@
       margin-top: 1rem;
       line-height: 1.45;
     }
+
+    textarea {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.85rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent-dim);
+      box-shadow: 0 0 0 3px rgba(108, 156, 255, 0.2);
+    }
+
+    .post-composer,
+    .post-feed {
+      margin-top: 2rem;
+      text-align: left;
+      padding: 1.5rem;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .post-composer h2,
+    .post-feed h2 {
+      margin: 0 0 1rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .post-feed ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .post-feed li {
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .post-feed li:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .post-feed li:first-child {
+      padding-top: 0;
+    }
+
+    .post-meta {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .post-title {
+      font-weight: 600;
+      font-size: 1rem;
+      margin: 0 0 0.35rem;
+      color: var(--text);
+    }
+
+    .post-body {
+      margin: 0;
+      font-size: 0.92rem;
+      color: var(--muted);
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .post-success {
+      font-size: 0.85rem;
+      color: #7fd99a;
+      margin: 0 0 0.75rem;
+      min-height: 1.25em;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
@@ -234,7 +326,7 @@
           <label for="signin-email">Email</label>
           <input id="signin-email" name="email" type="email" required placeholder="you@example.com" />
           <label for="signin-password">Password</label>
-          <input id="signin-password" name="password" type="password" autocomplete="current-password" placeholder="Demo: any value" />
+          <input id="signin-password" name="password" type="password" autocomplete="current-password" placeholder="Your password (any for built-in demo users)" />
           <button type="submit" class="submit" id="btn-signin">Sign in</button>
         </form>
       </div>
@@ -249,13 +341,13 @@
           <label for="signup-email">Email</label>
           <input id="signup-email" name="email" type="email" required placeholder="you@example.com" />
           <label for="signup-password">Password</label>
-          <input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="Demo: not stored by API" />
+          <input id="signup-password" name="password" type="password" autocomplete="new-password" required placeholder="Stored in this browser for re-login" />
           <button type="submit" class="submit" id="btn-signup">Create account</button>
         </form>
       </div>
 
       <p class="hint">
-        Uses the public <strong>GraphQL Zero</strong> demo API (<code>graphqlzero.almansi.me</code>). Sign-in matches your email to a user in the dataset; sign-up runs a real <code>createUser</code> mutation.
+        Accounts are saved in <strong>this browser only</strong> (<code>localStorage</code>), same site URL (e.g. your Vercel domain). Sign-up calls GraphQL for demo purposes; if that fails, you can still sign in here with the email and password you chose. Built-in demo login: <strong>Sincere@april.biz</strong> + any password.
       </p>
     </div>
   </div>
@@ -265,12 +357,70 @@
       <h1>Swipe App</h1>
       <p>You’re signed in as <span class="username-display" id="display-username">—</span>.</p>
       <button type="button" class="btn-secondary" id="btn-signout">Sign out</button>
+
+      <section id="post-composer" class="post-composer" hidden>
+        <h2>Write a post</h2>
+        <form id="form-post">
+          <label for="post-title">Title</label>
+          <input id="post-title" name="title" type="text" required maxlength="200" placeholder="What’s on your mind?" />
+          <label for="post-body">Body</label>
+          <textarea id="post-body" name="body" required maxlength="8000" placeholder="Write something…"></textarea>
+          <p class="error-msg" id="err-post"></p>
+          <p class="post-success" id="msg-post" aria-live="polite"></p>
+          <button type="submit" class="submit" id="btn-post">Post</button>
+        </form>
+      </section>
+
+      <section id="post-feed" class="post-feed" hidden>
+        <h2>Your posts</h2>
+        <ul id="post-list"></ul>
+        <p id="post-empty" class="hint" style="margin-top: 0.5rem">No posts yet. Write one above.</p>
+      </section>
     </div>
   </main>
 
   <script>
     const GRAPHQL_URL = "https://graphqlzero.almansi.me/api";
     const STORAGE_KEY = "swipe_app_session";
+    const LOCAL_ACCOUNTS_KEY = "swipe_app_local_accounts";
+    const POSTS_STORAGE_KEY = "swipe_app_posts";
+
+    function normalizeEmail(email) {
+      return String(email || "").trim().toLowerCase();
+    }
+
+    function loadLocalAccounts() {
+      try {
+        const raw = localStorage.getItem(LOCAL_ACCOUNTS_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveLocalAccounts(list) {
+      localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(list));
+    }
+
+    /** Persists sign-ups so sign-in works: GraphQL Zero does not list new users in `users`. */
+    function upsertLocalAccount(entry) {
+      const emailNorm = normalizeEmail(entry.email);
+      const list = loadLocalAccounts().filter((a) => normalizeEmail(a.email) !== emailNorm);
+      list.push({
+        email: emailNorm,
+        username: entry.username,
+        name: entry.name,
+        password: entry.password,
+        id: entry.id ?? null,
+      });
+      saveLocalAccounts(list);
+    }
+
+    function findLocalByEmail(email) {
+      const key = normalizeEmail(email);
+      return loadLocalAccounts().find((a) => normalizeEmail(a.email) === key) || null;
+    }
 
     async function gql(query, variables) {
       const res = await fetch(GRAPHQL_URL, {
@@ -305,6 +455,58 @@
       sessionStorage.removeItem(STORAGE_KEY);
     }
 
+    function loadAllPosts() {
+      try {
+        const raw = localStorage.getItem(POSTS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveAllPosts(posts) {
+      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
+    }
+
+    function addStoredPost(entry) {
+      const posts = loadAllPosts();
+      posts.unshift(entry);
+      saveAllPosts(posts);
+    }
+
+    function postsForUser(username) {
+      return loadAllPosts().filter((p) => p.username === username);
+    }
+
+    function renderPostList(username) {
+      const ul = document.getElementById("post-list");
+      const empty = document.getElementById("post-empty");
+      const list = postsForUser(username);
+      ul.innerHTML = "";
+      if (!list.length) {
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+      for (const p of list) {
+        const li = document.createElement("li");
+        const via =
+          p.via === "graphql"
+            ? "Posted via GraphQL"
+            : "Saved on this device (API unavailable)";
+        const when = p.createdAt ? new Date(p.createdAt).toLocaleString() : "";
+        li.innerHTML = `
+          <div class="post-meta">${when ? `${when} · ` : ""}${via}</div>
+          <div class="post-title"></div>
+          <p class="post-body"></p>
+        `;
+        li.querySelector(".post-title").textContent = p.title;
+        li.querySelector(".post-body").textContent = p.body;
+        ul.appendChild(li);
+      }
+    }
+
     const overlay = document.getElementById("auth-overlay");
     const displayUsername = document.getElementById("display-username");
     const tabSignin = document.getElementById("tab-signin");
@@ -316,15 +518,27 @@
     const errSignin = document.getElementById("err-signin");
     const errSignup = document.getElementById("err-signup");
     const btnSignout = document.getElementById("btn-signout");
+    const postComposer = document.getElementById("post-composer");
+    const postFeed = document.getElementById("post-feed");
+    const formPost = document.getElementById("form-post");
+    const errPost = document.getElementById("err-post");
+    const msgPost = document.getElementById("msg-post");
 
     function showSignedIn(user) {
       displayUsername.textContent = user.username;
       overlay.classList.add("hidden");
+      postComposer.hidden = false;
+      postFeed.hidden = false;
+      renderPostList(user.username);
     }
 
     function showSignedOut() {
       displayUsername.textContent = "—";
       overlay.classList.remove("hidden");
+      postComposer.hidden = true;
+      postFeed.hidden = true;
+      errPost.textContent = "";
+      msgPost.textContent = "";
     }
 
     function selectTab(signup) {
@@ -343,10 +557,28 @@
     formSignin.addEventListener("submit", async (e) => {
       e.preventDefault();
       errSignin.textContent = "";
-      const email = document.getElementById("signin-email").value.trim();
+      const email = normalizeEmail(document.getElementById("signin-email").value);
+      const password = document.getElementById("signin-password").value;
       const btn = document.getElementById("btn-signin");
       btn.disabled = true;
       try {
+        const local = findLocalByEmail(email);
+        if (local) {
+          if (local.password !== password) {
+            errSignin.textContent = "Wrong password for this account.";
+            return;
+          }
+          const user = {
+            username: local.username,
+            name: local.name,
+            email: local.email,
+            id: local.id,
+          };
+          saveSession(user);
+          showSignedIn(user);
+          return;
+        }
+
         const q = `
           query UsersForLogin {
             users {
@@ -361,16 +593,21 @@
         `;
         const data = await gql(q);
         const list = data.users?.data || [];
-        const match = list.find((u) => u.email.toLowerCase() === email.toLowerCase());
+        const match = list.find((u) => normalizeEmail(u.email) === email);
         if (!match) {
-          errSignin.textContent = "No user found with that email. Try Sign up or use a demo email from the API.";
+          errSignin.textContent =
+            "No account on this device and no demo user with that email. Sign up here first (same browser & URL), or try demo user Sincere@april.biz with any password.";
           return;
         }
         const user = { username: match.username, name: match.name, email: match.email, id: match.id };
         saveSession(user);
         showSignedIn(user);
       } catch (err) {
-        errSignin.textContent = err.message || "Something went wrong.";
+        const msg = err.message || "Something went wrong.";
+        errSignin.textContent =
+          /fetch|network|Failed to fetch|Load failed/i.test(msg)
+            ? `${msg} — check connection or disable blockers for graphqlzero.almansi.me.`
+            : msg;
       } finally {
         btn.disabled = false;
       }
@@ -381,8 +618,13 @@
       errSignup.textContent = "";
       const name = document.getElementById("signup-name").value.trim();
       const username = document.getElementById("signup-username").value.trim();
-      const email = document.getElementById("signup-email").value.trim();
+      const email = normalizeEmail(document.getElementById("signup-email").value);
+      const password = document.getElementById("signup-password").value;
       const btn = document.getElementById("btn-signup");
+
+      // Save locally before calling the API so Sign in works even if GraphQL is blocked or fails.
+      upsertLocalAccount({ email, username, name, password, id: null });
+
       btn.disabled = true;
       try {
         const mutation = `
@@ -399,12 +641,26 @@
           input: { name, username, email },
         });
         const u = data.createUser;
-        const user = { username: u.username, name: u.name, email: u.email, id: u.id };
+        upsertLocalAccount({
+          email: normalizeEmail(u.email),
+          username: u.username,
+          name: u.name,
+          password,
+          id: u.id,
+        });
+        const user = { username: u.username, name: u.name, email: normalizeEmail(u.email), id: u.id };
         saveSession(user);
         showSignedIn(user);
         formSignup.reset();
       } catch (err) {
-        errSignup.textContent = err.message || "Something went wrong.";
+        errSignup.textContent =
+          "Demo API error: " +
+          (err.message || "unknown") +
+          " — your account is still saved in this browser. Use Sign in with the same email and password.";
+        const user = { username, name: name, email, id: null };
+        saveSession(user);
+        showSignedIn(user);
+        formSignup.reset();
       } finally {
         btn.disabled = false;
       }
@@ -413,6 +669,62 @@
     btnSignout.addEventListener("click", () => {
       clearSession();
       showSignedOut();
+    });
+
+    formPost.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errPost.textContent = "";
+      msgPost.textContent = "";
+      const session = loadSession();
+      if (!session?.username) return;
+
+      const title = document.getElementById("post-title").value.trim();
+      const body = document.getElementById("post-body").value.trim();
+      const btn = document.getElementById("btn-post");
+      btn.disabled = true;
+
+      const mutation = `
+        mutation CreatePost($input: CreatePostInput!) {
+          createPost(input: $input) {
+            id
+            title
+            body
+          }
+        }
+      `;
+
+      try {
+        const data = await gql(mutation, { input: { title, body } });
+        const p = data.createPost;
+        addStoredPost({
+          id: String(p.id),
+          title: p.title,
+          body: p.body,
+          username: session.username,
+          createdAt: new Date().toISOString(),
+          via: "graphql",
+        });
+        msgPost.textContent = "Posted successfully.";
+        formPost.reset();
+        renderPostList(session.username);
+      } catch (err) {
+        addStoredPost({
+          id: `local-${Date.now()}`,
+          title,
+          body,
+          username: session.username,
+          createdAt: new Date().toISOString(),
+          via: "local",
+        });
+        errPost.textContent =
+          (err.message || "Could not reach API") +
+          " — your post was saved on this device only.";
+        msgPost.textContent = "Saved locally.";
+        formPost.reset();
+        renderPostList(session.username);
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     (function init() {
