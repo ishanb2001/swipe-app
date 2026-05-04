@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Swipe App</title>
+  <style>
+    :root {
+      --bg: #0f1219;
+      --panel: #1a1f2e;
+      --border: #2d3548;
+      --text: #e8ecf4;
+      --muted: #8b95a8;
+      --accent: #6c9cff;
+      --accent-dim: #4a7ae8;
+      --danger: #f07178;
+      --radius: 14px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background: radial-gradient(ellipse 120% 80% at 50% -20%, #1e2a4a 0%, var(--bg) 55%);
+      color: var(--text);
+    }
+
+    main {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .shell {
+      text-align: center;
+      max-width: 420px;
+    }
+
+    .shell h1 {
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      margin: 0 0 0.5rem;
+      font-size: 1.75rem;
+    }
+
+    .shell p {
+      color: var(--muted);
+      margin: 0 0 1.5rem;
+      line-height: 1.5;
+    }
+
+    .username-display {
+      font-size: 1.35rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    button.btn-secondary {
+      margin-top: 1.25rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 0.55rem 1rem;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    button.btn-secondary:hover {
+      border-color: var(--muted);
+      color: var(--text);
+    }
+
+    /* Overlay */
+    #auth-overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      background: rgba(8, 10, 14, 0.72);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      transition: opacity 0.25s ease, visibility 0.25s ease;
+    }
+
+    #auth-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .auth-card {
+      width: min(100%, 400px);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem 1.5rem 1.5rem;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+    }
+
+    .auth-card h2 {
+      margin: 0 0 0.35rem;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+    }
+
+    .auth-card .subtitle {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0 0 1.25rem;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.35rem;
+      margin-bottom: 1.25rem;
+      padding: 4px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 10px;
+    }
+
+    .tabs button {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.92rem;
+      font-weight: 500;
+    }
+
+    .tabs button[aria-selected="true"] {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.85rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--accent-dim);
+      box-shadow: 0 0 0 3px rgba(108, 156, 255, 0.2);
+    }
+
+    .submit {
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.72rem 1rem;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(165deg, var(--accent) 0%, var(--accent-dim) 100%);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    .submit:hover {
+      filter: brightness(1.06);
+    }
+
+    .submit:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .error-msg {
+      font-size: 0.85rem;
+      color: var(--danger);
+      margin: 0 0 0.75rem;
+      min-height: 1.25em;
+    }
+
+    .hint {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 1rem;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <div id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="auth-card">
+      <h2 id="auth-title">Welcome</h2>
+      <p class="subtitle">Sign in or create an account (via GraphQL).</p>
+
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-signin" aria-selected="true" aria-controls="panel-signin">Sign in</button>
+        <button type="button" role="tab" id="tab-signup" aria-selected="false" aria-controls="panel-signup">Sign up</button>
+      </div>
+
+      <div id="panel-signin" class="panel active" role="tabpanel" aria-labelledby="tab-signin">
+        <p class="error-msg" id="err-signin"></p>
+        <form id="form-signin" autocomplete="on">
+          <label for="signin-email">Email</label>
+          <input id="signin-email" name="email" type="email" required placeholder="you@example.com" />
+          <label for="signin-password">Password</label>
+          <input id="signin-password" name="password" type="password" autocomplete="current-password" placeholder="Demo: any value" />
+          <button type="submit" class="submit" id="btn-signin">Sign in</button>
+        </form>
+      </div>
+
+      <div id="panel-signup" class="panel" role="tabpanel" aria-labelledby="tab-signup" hidden>
+        <p class="error-msg" id="err-signup"></p>
+        <form id="form-signup" autocomplete="on">
+          <label for="signup-name">Display name</label>
+          <input id="signup-name" name="name" type="text" required placeholder="Jane Doe" />
+          <label for="signup-username">Username</label>
+          <input id="signup-username" name="username" type="text" required placeholder="janedoe" autocapitalize="none" />
+          <label for="signup-email">Email</label>
+          <input id="signup-email" name="email" type="email" required placeholder="you@example.com" />
+          <label for="signup-password">Password</label>
+          <input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="Demo: not stored by API" />
+          <button type="submit" class="submit" id="btn-signup">Create account</button>
+        </form>
+      </div>
+
+      <p class="hint">
+        Uses the public <strong>GraphQL Zero</strong> demo API (<code>graphqlzero.almansi.me</code>). Sign-in matches your email to a user in the dataset; sign-up runs a real <code>createUser</code> mutation.
+      </p>
+    </div>
+  </div>
+
+  <main>
+    <div class="shell">
+      <h1>Swipe App</h1>
+      <p>You’re signed in as <span class="username-display" id="display-username">—</span>.</p>
+      <button type="button" class="btn-secondary" id="btn-signout">Sign out</button>
+    </div>
+  </main>
+
+  <script>
+    const GRAPHQL_URL = "https://graphqlzero.almansi.me/api";
+    const STORAGE_KEY = "swipe_app_session";
+
+    async function gql(query, variables) {
+      const res = await fetch(GRAPHQL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, variables }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.errors?.[0]?.message || res.statusText || "Network error");
+      }
+      if (json.errors?.length) {
+        throw new Error(json.errors.map((e) => e.message).join("; "));
+      }
+      return json.data;
+    }
+
+    function saveSession(user) {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    }
+
+    function loadSession() {
+      try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function clearSession() {
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+
+    const overlay = document.getElementById("auth-overlay");
+    const displayUsername = document.getElementById("display-username");
+    const tabSignin = document.getElementById("tab-signin");
+    const tabSignup = document.getElementById("tab-signup");
+    const panelSignin = document.getElementById("panel-signin");
+    const panelSignup = document.getElementById("panel-signup");
+    const formSignin = document.getElementById("form-signin");
+    const formSignup = document.getElementById("form-signup");
+    const errSignin = document.getElementById("err-signin");
+    const errSignup = document.getElementById("err-signup");
+    const btnSignout = document.getElementById("btn-signout");
+
+    function showSignedIn(user) {
+      displayUsername.textContent = user.username;
+      overlay.classList.add("hidden");
+    }
+
+    function showSignedOut() {
+      displayUsername.textContent = "—";
+      overlay.classList.remove("hidden");
+    }
+
+    function selectTab(signup) {
+      tabSignin.setAttribute("aria-selected", !signup);
+      tabSignup.setAttribute("aria-selected", signup);
+      panelSignin.classList.toggle("active", !signup);
+      panelSignup.classList.toggle("active", signup);
+      panelSignup.hidden = !signup;
+      errSignin.textContent = "";
+      errSignup.textContent = "";
+    }
+
+    tabSignin.addEventListener("click", () => selectTab(false));
+    tabSignup.addEventListener("click", () => selectTab(true));
+
+    formSignin.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errSignin.textContent = "";
+      const email = document.getElementById("signin-email").value.trim();
+      const btn = document.getElementById("btn-signin");
+      btn.disabled = true;
+      try {
+        const q = `
+          query UsersForLogin {
+            users {
+              data {
+                id
+                username
+                name
+                email
+              }
+            }
+          }
+        `;
+        const data = await gql(q);
+        const list = data.users?.data || [];
+        const match = list.find((u) => u.email.toLowerCase() === email.toLowerCase());
+        if (!match) {
+          errSignin.textContent = "No user found with that email. Try Sign up or use a demo email from the API.";
+          return;
+        }
+        const user = { username: match.username, name: match.name, email: match.email, id: match.id };
+        saveSession(user);
+        showSignedIn(user);
+      } catch (err) {
+        errSignin.textContent = err.message || "Something went wrong.";
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    formSignup.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errSignup.textContent = "";
+      const name = document.getElementById("signup-name").value.trim();
+      const username = document.getElementById("signup-username").value.trim();
+      const email = document.getElementById("signup-email").value.trim();
+      const btn = document.getElementById("btn-signup");
+      btn.disabled = true;
+      try {
+        const mutation = `
+          mutation CreateUser($input: CreateUserInput!) {
+            createUser(input: $input) {
+              id
+              username
+              name
+              email
+            }
+          }
+        `;
+        const data = await gql(mutation, {
+          input: { name, username, email },
+        });
+        const u = data.createUser;
+        const user = { username: u.username, name: u.name, email: u.email, id: u.id };
+        saveSession(user);
+        showSignedIn(user);
+        formSignup.reset();
+      } catch (err) {
+        errSignup.textContent = err.message || "Something went wrong.";
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    btnSignout.addEventListener("click", () => {
+      clearSession();
+      showSignedOut();
+    });
+
+    (function init() {
+      const session = loadSession();
+      if (session?.username) {
+        showSignedIn(session);
+      } else {
+        showSignedOut();
+      }
+    })();
+  </script>
+</body>
+</html>
