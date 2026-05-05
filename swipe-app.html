@@ -313,7 +313,7 @@
   <div id="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <div class="auth-card">
       <h2 id="auth-title">Welcome</h2>
-      <p class="subtitle">Sign in or create an account (via GraphQL).</p>
+      <p class="subtitle">Sign in or create an account (stored in Supabase).</p>
 
       <div class="tabs" role="tablist">
         <button type="button" role="tab" id="tab-signin" aria-selected="true" aria-controls="panel-signin">Sign in</button>
@@ -326,7 +326,7 @@
           <label for="signin-email">Email</label>
           <input id="signin-email" name="email" type="email" required placeholder="you@example.com" />
           <label for="signin-password">Password</label>
-          <input id="signin-password" name="password" type="password" autocomplete="current-password" placeholder="Your password (any for built-in demo users)" />
+          <input id="signin-password" name="password" type="password" autocomplete="current-password" placeholder="Password" />
           <button type="submit" class="submit" id="btn-signin">Sign in</button>
         </form>
       </div>
@@ -341,13 +341,13 @@
           <label for="signup-email">Email</label>
           <input id="signup-email" name="email" type="email" required placeholder="you@example.com" />
           <label for="signup-password">Password</label>
-          <input id="signup-password" name="password" type="password" autocomplete="new-password" required placeholder="Stored in this browser for re-login" />
+          <input id="signup-password" name="password" type="password" autocomplete="new-password" required placeholder="Choose a password (min 6 characters)" />
           <button type="submit" class="submit" id="btn-signup">Create account</button>
         </form>
       </div>
 
       <p class="hint">
-        Accounts are saved in <strong>this browser only</strong> (<code>localStorage</code>), same site URL (e.g. your Vercel domain). Sign-up calls GraphQL for demo purposes; if that fails, you can still sign in here with the email and password you chose. Built-in demo login: <strong>Sincere@april.biz</strong> + any password.
+        Uses <strong>Supabase</strong> for accounts and posts so you can sign in from any device. Create a free project, run <code>supabase/schema.sql</code> in the SQL editor, then paste your project URL and anon key into <code>swipe-app.html</code> (see script top).
       </p>
     </div>
   </div>
@@ -372,140 +372,36 @@
       </section>
 
       <section id="post-feed" class="post-feed" hidden>
-        <h2>Your posts</h2>
+        <h2>Feed</h2>
         <ul id="post-list"></ul>
         <p id="post-empty" class="hint" style="margin-top: 0.5rem">No posts yet. Write one above.</p>
       </section>
     </div>
   </main>
 
-  <script>
-    const GRAPHQL_URL = "https://graphqlzero.almansi.me/api";
-    const STORAGE_KEY = "swipe_app_session";
-    const LOCAL_ACCOUNTS_KEY = "swipe_app_local_accounts";
-    const POSTS_STORAGE_KEY = "swipe_app_posts";
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/+esm";
+
+    /** Feed page size — Postgres returns rows via Supabase; keep bounded for scale (add pagination later). */
+    const FEED_LIMIT = 100;
+
+    const SUPABASE_URL = "https://qcnjrwitphovophthfxa.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_-qnWWpcjoJT7GKeToZcPVw_OpZLeKH1";
+
+    function isConfigured() {
+      return (
+        SUPABASE_URL.startsWith("https://") &&
+        SUPABASE_ANON_KEY.length > 30 &&
+        !SUPABASE_URL.includes("YOUR_PROJECT_REF") &&
+        !SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY")
+      );
+    }
 
     function normalizeEmail(email) {
       return String(email || "").trim().toLowerCase();
     }
 
-    function loadLocalAccounts() {
-      try {
-        const raw = localStorage.getItem(LOCAL_ACCOUNTS_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-
-    function saveLocalAccounts(list) {
-      localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(list));
-    }
-
-    /** Persists sign-ups so sign-in works: GraphQL Zero does not list new users in `users`. */
-    function upsertLocalAccount(entry) {
-      const emailNorm = normalizeEmail(entry.email);
-      const list = loadLocalAccounts().filter((a) => normalizeEmail(a.email) !== emailNorm);
-      list.push({
-        email: emailNorm,
-        username: entry.username,
-        name: entry.name,
-        password: entry.password,
-        id: entry.id ?? null,
-      });
-      saveLocalAccounts(list);
-    }
-
-    function findLocalByEmail(email) {
-      const key = normalizeEmail(email);
-      return loadLocalAccounts().find((a) => normalizeEmail(a.email) === key) || null;
-    }
-
-    async function gql(query, variables) {
-      const res = await fetch(GRAPHQL_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, variables }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.errors?.[0]?.message || res.statusText || "Network error");
-      }
-      if (json.errors?.length) {
-        throw new Error(json.errors.map((e) => e.message).join("; "));
-      }
-      return json.data;
-    }
-
-    function saveSession(user) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    }
-
-    function loadSession() {
-      try {
-        const raw = sessionStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
-      }
-    }
-
-    function clearSession() {
-      sessionStorage.removeItem(STORAGE_KEY);
-    }
-
-    function loadAllPosts() {
-      try {
-        const raw = localStorage.getItem(POSTS_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed : [];
-      } catch {
-        return [];
-      }
-    }
-
-    function saveAllPosts(posts) {
-      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(posts));
-    }
-
-    function addStoredPost(entry) {
-      const posts = loadAllPosts();
-      posts.unshift(entry);
-      saveAllPosts(posts);
-    }
-
-    function postsForUser(username) {
-      return loadAllPosts().filter((p) => p.username === username);
-    }
-
-    function renderPostList(username) {
-      const ul = document.getElementById("post-list");
-      const empty = document.getElementById("post-empty");
-      const list = postsForUser(username);
-      ul.innerHTML = "";
-      if (!list.length) {
-        empty.hidden = false;
-        return;
-      }
-      empty.hidden = true;
-      for (const p of list) {
-        const li = document.createElement("li");
-        const via =
-          p.via === "graphql"
-            ? "Posted via GraphQL"
-            : "Saved on this device (API unavailable)";
-        const when = p.createdAt ? new Date(p.createdAt).toLocaleString() : "";
-        li.innerHTML = `
-          <div class="post-meta">${when ? `${when} · ` : ""}${via}</div>
-          <div class="post-title"></div>
-          <p class="post-body"></p>
-        `;
-        li.querySelector(".post-title").textContent = p.title;
-        li.querySelector(".post-body").textContent = p.body;
-        ul.appendChild(li);
-      }
-    }
+    let sb = null;
 
     const overlay = document.getElementById("auth-overlay");
     const displayUsername = document.getElementById("display-username");
@@ -524,12 +420,43 @@
     const errPost = document.getElementById("err-post");
     const msgPost = document.getElementById("msg-post");
 
-    function showSignedIn(user) {
-      displayUsername.textContent = user.username;
-      overlay.classList.add("hidden");
-      postComposer.hidden = false;
-      postFeed.hidden = false;
-      renderPostList(user.username);
+    async function fetchProfileWithRetry(userId) {
+      for (let i = 0; i < 15; i++) {
+        const { data } = await sb.from("profiles").select("id, username, display_name").eq("id", userId).maybeSingle();
+        if (data) return data;
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      return null;
+    }
+
+    function fallbackUsername(user) {
+      const metaName = user.user_metadata?.username;
+      const emailName = user.email ? user.email.split("@")[0] : "user";
+      return String(metaName || emailName)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "")
+        .slice(0, 24) || "user";
+    }
+
+    async function ensureProfile(user) {
+      const existing = await fetchProfileWithRetry(user.id);
+      if (existing) return existing;
+
+      const username = fallbackUsername(user);
+      const displayName = user.user_metadata?.display_name || username;
+      const { data, error } = await sb
+        .from("profiles")
+        .insert({
+          id: user.id,
+          username,
+          display_name: displayName,
+        })
+        .select("id, username, display_name")
+        .single();
+
+      if (error) throw error;
+      return data;
     }
 
     function showSignedOut() {
@@ -539,6 +466,99 @@
       postFeed.hidden = true;
       errPost.textContent = "";
       msgPost.textContent = "";
+      document.getElementById("post-list").innerHTML = "";
+    }
+
+    async function handleSession(session) {
+      if (!session) {
+        showSignedOut();
+        return;
+      }
+      let profile = null;
+      try {
+        profile = await ensureProfile(session.user);
+      } catch (err) {
+        errSignin.textContent =
+          (err.message || "Could not load your profile.") +
+          " Run the latest supabase/schema.sql in Supabase SQL editor, then refresh.";
+        return;
+      }
+      errSignin.textContent = "";
+      displayUsername.textContent = profile.username;
+      overlay.classList.add("hidden");
+      postComposer.hidden = false;
+      postFeed.hidden = false;
+      await loadPosts();
+    }
+
+    async function loadPosts() {
+      const ul = document.getElementById("post-list");
+      const empty = document.getElementById("post-empty");
+      errPost.textContent = "";
+
+      let rows = [];
+      const nested = await sb
+        .from("posts")
+        .select(
+          `
+          id,
+          title,
+          body,
+          created_at,
+          profiles ( username, display_name )
+        `
+        )
+        .order("created_at", { ascending: false })
+        .limit(FEED_LIMIT);
+
+      if (nested.error) {
+        const flat = await sb
+          .from("posts")
+          .select("id, title, body, created_at, user_id")
+          .order("created_at", { ascending: false })
+          .limit(FEED_LIMIT);
+        if (flat.error) {
+          errPost.textContent = flat.error.message;
+          return;
+        }
+        const ids = [...new Set((flat.data || []).map((r) => r.user_id))];
+        let profMap = {};
+        if (ids.length) {
+          const { data: profs } = await sb.from("profiles").select("id, username, display_name").in("id", ids);
+          profMap = Object.fromEntries((profs || []).map((p) => [p.id, p]));
+        }
+        rows = (flat.data || []).map((r) => ({
+          ...r,
+          profiles: profMap[r.user_id],
+        }));
+      } else {
+        rows = nested.data || [];
+      }
+
+      ul.innerHTML = "";
+      if (!rows.length) {
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+
+      for (const p of rows) {
+        const prof = p.profiles || {};
+        const author = prof.username || "user";
+        const when = p.created_at ? new Date(p.created_at).toLocaleString() : "";
+        const li = document.createElement("li");
+        const meta = document.createElement("div");
+        meta.className = "post-meta";
+        meta.textContent = "@" + author + (when ? " · " + when : "");
+        const titleEl = document.createElement("div");
+        titleEl.className = "post-title";
+        titleEl.textContent = p.title;
+        const bodyEl = document.createElement("p");
+        bodyEl.className = "post-body";
+        bodyEl.textContent = p.body;
+        li.append(meta, titleEl, bodyEl);
+        ul.appendChild(li);
+      }
     }
 
     function selectTab(signup) {
@@ -557,57 +577,16 @@
     formSignin.addEventListener("submit", async (e) => {
       e.preventDefault();
       errSignin.textContent = "";
+      if (!sb) return;
       const email = normalizeEmail(document.getElementById("signin-email").value);
       const password = document.getElementById("signin-password").value;
       const btn = document.getElementById("btn-signin");
       btn.disabled = true;
       try {
-        const local = findLocalByEmail(email);
-        if (local) {
-          if (local.password !== password) {
-            errSignin.textContent = "Wrong password for this account.";
-            return;
-          }
-          const user = {
-            username: local.username,
-            name: local.name,
-            email: local.email,
-            id: local.id,
-          };
-          saveSession(user);
-          showSignedIn(user);
-          return;
-        }
-
-        const q = `
-          query UsersForLogin {
-            users {
-              data {
-                id
-                username
-                name
-                email
-              }
-            }
-          }
-        `;
-        const data = await gql(q);
-        const list = data.users?.data || [];
-        const match = list.find((u) => normalizeEmail(u.email) === email);
-        if (!match) {
-          errSignin.textContent =
-            "No account on this device and no demo user with that email. Sign up here first (same browser & URL), or try demo user Sincere@april.biz with any password.";
-          return;
-        }
-        const user = { username: match.username, name: match.name, email: match.email, id: match.id };
-        saveSession(user);
-        showSignedIn(user);
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
       } catch (err) {
-        const msg = err.message || "Something went wrong.";
-        errSignin.textContent =
-          /fetch|network|Failed to fetch|Load failed/i.test(msg)
-            ? `${msg} — check connection or disable blockers for graphqlzero.almansi.me.`
-            : msg;
+        errSignin.textContent = err.message || "Sign in failed.";
       } finally {
         btn.disabled = false;
       }
@@ -616,125 +595,119 @@
     formSignup.addEventListener("submit", async (e) => {
       e.preventDefault();
       errSignup.textContent = "";
+      if (!sb) return;
+
       const name = document.getElementById("signup-name").value.trim();
-      const username = document.getElementById("signup-username").value.trim();
+      let username = document.getElementById("signup-username").value.trim().toLowerCase();
+      username = username.replace(/[^a-z0-9_]/g, "");
+      if (username.length < 3) {
+        errSignup.textContent = "Username must be at least 3 letters, numbers, or underscores.";
+        return;
+      }
+
       const email = normalizeEmail(document.getElementById("signup-email").value);
       const password = document.getElementById("signup-password").value;
+      if (password.length < 6) {
+        errSignup.textContent = "Password must be at least 6 characters.";
+        return;
+      }
+
       const btn = document.getElementById("btn-signup");
-
-      // Save locally before calling the API so Sign in works even if GraphQL is blocked or fails.
-      upsertLocalAccount({ email, username, name, password, id: null });
-
       btn.disabled = true;
       try {
-        const mutation = `
-          mutation CreateUser($input: CreateUserInput!) {
-            createUser(input: $input) {
-              id
-              username
-              name
-              email
-            }
-          }
-        `;
-        const data = await gql(mutation, {
-          input: { name, username, email },
-        });
-        const u = data.createUser;
-        upsertLocalAccount({
-          email: normalizeEmail(u.email),
-          username: u.username,
-          name: u.name,
+        const { data, error } = await sb.auth.signUp({
+          email,
           password,
-          id: u.id,
+          options: {
+            data: {
+              username,
+              display_name: name,
+            },
+          },
         });
-        const user = { username: u.username, name: u.name, email: normalizeEmail(u.email), id: u.id };
-        saveSession(user);
-        showSignedIn(user);
+        if (error) throw error;
+
+        if (!data.session) {
+          errSignup.textContent =
+            "Confirm your email if prompted, then sign in. (Disable “Confirm email” under Authentication → Providers → Email in Supabase for quicker testing.)";
+          formSignup.reset();
+          return;
+        }
+
         formSignup.reset();
+        errSignup.textContent = "";
       } catch (err) {
-        errSignup.textContent =
-          "Demo API error: " +
-          (err.message || "unknown") +
-          " — your account is still saved in this browser. Use Sign in with the same email and password.";
-        const user = { username, name: name, email, id: null };
-        saveSession(user);
-        showSignedIn(user);
-        formSignup.reset();
+        errSignup.textContent = err.message || "Sign up failed.";
       } finally {
         btn.disabled = false;
       }
     });
 
-    btnSignout.addEventListener("click", () => {
-      clearSession();
-      showSignedOut();
+    btnSignout.addEventListener("click", async () => {
+      if (!sb) return;
+      await sb.auth.signOut();
     });
 
     formPost.addEventListener("submit", async (e) => {
       e.preventDefault();
       errPost.textContent = "";
       msgPost.textContent = "";
-      const session = loadSession();
-      if (!session?.username) return;
+      if (!sb) return;
 
       const title = document.getElementById("post-title").value.trim();
       const body = document.getElementById("post-body").value.trim();
       const btn = document.getElementById("btn-post");
       btn.disabled = true;
 
-      const mutation = `
-        mutation CreatePost($input: CreatePostInput!) {
-          createPost(input: $input) {
-            id
-            title
-            body
-          }
-        }
-      `;
-
       try {
-        const data = await gql(mutation, { input: { title, body } });
-        const p = data.createPost;
-        addStoredPost({
-          id: String(p.id),
-          title: p.title,
-          body: p.body,
-          username: session.username,
-          createdAt: new Date().toISOString(),
-          via: "graphql",
-        });
-        msgPost.textContent = "Posted successfully.";
-        formPost.reset();
-        renderPostList(session.username);
-      } catch (err) {
-        addStoredPost({
-          id: `local-${Date.now()}`,
+        const {
+          data: { user },
+          error: userErr,
+        } = await sb.auth.getUser();
+        if (userErr || !user) throw new Error("Not signed in.");
+
+        const { error } = await sb.from("posts").insert({
+          user_id: user.id,
           title,
           body,
-          username: session.username,
-          createdAt: new Date().toISOString(),
-          via: "local",
         });
-        errPost.textContent =
-          (err.message || "Could not reach API") +
-          " — your post was saved on this device only.";
-        msgPost.textContent = "Saved locally.";
+        if (error) throw error;
+
+        msgPost.textContent = "Posted.";
         formPost.reset();
-        renderPostList(session.username);
+        await loadPosts();
+      } catch (err) {
+        errPost.textContent = err.message || "Could not post.";
       } finally {
         btn.disabled = false;
       }
     });
 
-    (function init() {
-      const session = loadSession();
-      if (session?.username) {
-        showSignedIn(session);
-      } else {
-        showSignedOut();
+    async function boot() {
+      if (!isConfigured()) {
+        errSignin.textContent =
+          "Set SUPABASE_URL and SUPABASE_ANON_KEY in swipe-app.html (Supabase → Settings → API). Run supabase/schema.sql first.";
+        return;
       }
-    })();
+
+      sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      });
+
+      sb.auth.onAuthStateChange((_event, session) => {
+        // Supabase warns against awaiting extra Supabase calls inside this callback.
+        // Schedule profile/feed loading after the auth event finishes so sign-in/up doesn't hang.
+        setTimeout(() => {
+          handleSession(session);
+        }, 0);
+      });
+    }
+
+    boot();
   </script>
 </body>
 </html>
